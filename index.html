@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>주성이와 석현이의 기묘한 디펜스</title>
+    <style>
+        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 'Courier New', Courier, monospace; overflow: hidden; user-select: none; touch-action: none; }
+        #error-log { position: fixed; top: 50px; left: 10px; color: red; font-size: 10px; z-index: 5000; background: rgba(0,0,0,0.7); pointer-events: none; }
+        
+        #start-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #1a3a1a 0%, #000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; text-align: center; }
+        #start-title { font-size: 28px; color: #f1c40f; text-shadow: 0 0 20px #f1c40f; margin-bottom: 40px; line-height: 1.5; padding: 0 20px; }
+        .btn-start { padding: 20px 60px; font-size: 24px; background: #c0392b; border: none; border-radius: 50px; color: white; cursor: pointer; font-weight: bold; }
+
+        #game-container { position: relative; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; }
+        #game-canvas { display: block; margin: 0 auto; flex-grow: 1; }
+
+        #top-ui { position: absolute; top: 0; left: 0; width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: space-around; font-size: 14px; z-index: 10; border-bottom: 2px solid #333; box-sizing: border-box; }
+        .stat-box { color: #f1c40f; font-weight: bold; }
+
+        #bottom-ui { width: 100%; background: rgba(0, 0, 0, 0.8); padding: 10px 5px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; border-top: 2px solid #333; z-index: 10; box-sizing: border-box; }
+        .control-btn { padding: 12px 8px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 2px solid #555; background: #333; color: white; cursor: pointer; flex: 1; min-width: 80px; }
+        .control-btn.active { border-color: #f1c40f; background: #555; box-shadow: inset 0 0 10px #000; }
+        .btn-sh { background: #27ae60; }
+        .btn-js { background: #2980b9; }
+        .btn-up { background: #8e44ad; }
+        .btn-guide { background: #7f8c8d; max-width: 60px; font-size: 11px; }
+
+        #guide-modal { position: fixed; top: 50%; left: 50%; translate: -50% -50%; width: 85%; max-height: 70%; background: #222; border: 3px solid #f1c40f; padding: 20px; display: none; z-index: 2000; overflow-y: auto; font-size: 14px; line-height: 1.6; border-radius: 15px; }
+    </style>
+</head>
+<body>
+    <div id="error-log"></div>
+    <div id="start-screen">
+        <h1 id="start-title">주성이와 석현이의<br>기묘한 디펜스</h1>
+        <button class="btn-start" onclick="initGame()">작전 개시</button>
+    </div>
+
+    <div id="guide-modal" onclick="this.style.display='none'">
+        <h2 style="color:#f1c40f; text-align:center;">📘 가이드북</h2>
+        <p><b>1. 조작법:</b> 하단 버튼 누르고 3x3 광장 빈칸을 터치해 유닛 배치!</p>
+        <p><b>2. 진화:</b> 돈을 모아 강화버튼을 누르고 유닛 연속 터치 (Max Lv.4)</p>
+        <p><b>3. 히든:</b> Lv.4 두 종류를 각각 4개씩 모으면 레이저포 등장!</p>
+        <p><b>4. 이자:</b> 매 라운드 종료 시 보유 자금의 <b>5%</b> 추가 획득!</p>
+        <p style="text-align:center; color:#7f8c8d;">(화면을 터치하면 닫힙니다)</p>
+    </div>
+
+    <div id="game-container">
+        <div id="top-ui">
+            <div class="stat-box">라운드: <span id="ui-round">1</span>/50</div>
+            <div class="stat-box">❤️ HP: <span id="ui-hp">100</span></div>
+            <div class="stat-box">💰 골드: $<span id="ui-money">150</span></div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="bottom-ui">
+            <button class="control-btn btn-sh" onclick="setMode('spawn_sh', this)">석현이($20)</button>
+            <button class="control-btn btn-js" onclick="setMode('spawn_js', this)">주성이($50)</button>
+            <button class="control-btn btn-up" onclick="setMode('upgrade', this)">강화</button>
+            <button class="control-btn btn-guide" onclick="document.getElementById('guide-modal').style.display='block'">가이드</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const errorLog = document.getElementById('error-log');
+
+        function logError(msg) {
+            errorLog.innerHTML += msg + "<br>";
+            console.error(msg);
+        }
+
+        function loadImage(src) {
+            const img = new Image();
+            img.src = src;
+            img.onerror = () => logError(`이미지 로드 실패: ${src}`);
+            return img;
+        }
+
+        const homeImg = loadImage('home.png');
+        const jsAtkImg = loadImage('js_atk_effect.png');
+        const laserImg5 = loadImage('laser_lv5.png');
+        const shImages = [], jsImages = [];
+        for (let i = 1; i <= 4; i++) {
+            shImages.push(loadImage(`sh_lv${i}.png`));
+            jsImages.push(loadImage(`js_lv${i}.png`));
+        }
+
+        let money = 150, hp = 100, round = 1, isPlaying = false, mode = 'none';
+        let towers = [], enemies = [], projectiles = [], floatTexts = [], enemiesToSpawn = 0;
+        let path = [], grids = [], currentTileSize = 40;
+
+        let audioCtx;
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if(type === 'sh') { osc.type = 'square'; osc.frequency.setValueAtTime(440, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); }
+            if(type === 'js') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(110, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); }
+            if(type === 'laser') { osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); }
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function initMapData() {
+            const w = canvas.width, h = canvas.height;
+            
+            currentTileSize = Math.min(85, Math.floor(w / 10)); 
+            
+            // 🔥 수정됨: 맨 오른쪽 광장을 아주 살짝 오른쪽으로 이동 (0.75 -> 0.78)
+            const centers = [
+                {x: w * 0.23, y: h * 0.52}, 
+                {x: w * 0.50, y: h * 0.52}, 
+                {x: w * 0.78, y: h * 0.52} 
+            ];
+            
+            grids = [];
+            centers.forEach(center => {
+                for(let r = -1; r <= 1; r++) {
+                    for(let c = -1; c <= 1; c++) {
+                        grids.push({ x: center.x + c * currentTileSize - currentTileSize/2, y: center.y + r * currentTileSize - currentTileSize/2, size: currentTileSize, tower: null });
+                    }
+                }
+            });
+            
+            path = [
+                {x: -50, y: h * 0.85}, 
+                {x: w * 0.35, y: h * 0.85}, 
+                {x: w * 0.35, y: h * 0.2}, 
+                {x: w * 0.65, y: h * 0.2}, 
+                {x: w * 0.65, y: h * 0.85}, 
+                {x: w * 0.92, y: h * 0.85}, 
+                {x: w * 0.92, y: h * 0.2},  
+                {x: w * 0.13, y: h * 0.2} 
+            ];
+        }
+
+        let bgCanvas = document.createElement('canvas');
+        function drawBackground() {
+            bgCanvas.width = canvas.width; bgCanvas.height = canvas.height;
+            const bctx = bgCanvas.getContext('2d');
+            bctx.fillStyle = '#223816'; bctx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+            bctx.fillStyle = '#1b2e12'; for(let i=0; i<300; i++) bctx.fillRect(Math.random()*bgCanvas.width, Math.random()*bgCanvas.height, 6, 6);
+            bctx.lineJoin = 'round'; bctx.lineCap = 'round';
+            
+            bctx.strokeStyle = '#4a2f16'; bctx.lineWidth = currentTileSize * 1.0; 
+            bctx.beginPath(); bctx.moveTo(path[0].x, path[0].y);
+            path.forEach(p => bctx.lineTo(p.x, p.y)); bctx.stroke();
+            
+            bctx.strokeStyle = '#8b5a2b'; bctx.lineWidth = currentTileSize * 0.8; 
+            bctx.beginPath(); bctx.moveTo(path[0].x, path[0].y);
+            path.forEach(p => bctx.lineTo(p.x, p.y)); bctx.stroke();
+            
+            grids.forEach(g => { 
+                bctx.fillStyle = '#444'; bctx.fillRect(g.x, g.y, g.size, g.size); 
+                bctx.strokeStyle = '#222'; bctx.lineWidth = 2; bctx.strokeRect(g.x, g.y, g.size, g.size); 
+            });
+        }
+
+        function initGame() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-container').style.display = 'flex';
+            
+            const container = document.getElementById('game-container');
+            const bottomUi = document.getElementById('bottom-ui');
+            canvas.width = container.clientWidth; 
+            canvas.height = container.clientHeight - bottomUi.offsetHeight; 
+
+            initMapData(); drawBackground(); isPlaying = true; spawnWave(); updateUI(); requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('resize', () => {
+            if(isPlaying) {
+                const container = document.getElementById('game-container');
+                const bottomUi = document.getElementById('bottom-ui');
+                canvas.width = container.clientWidth; 
+                canvas.height = container.clientHeight - bottomUi.offsetHeight; 
+                initMapData(); drawBackground();
+            }
+        });
+
+        function setMode(m, btn) { mode = m; document.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active')); if(btn) btn.classList.add('active'); }
+        const rect = canvas.getBoundingClientRect();
+        function getCoords(e) { const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY; return { x: cx - rect.left, y: cy - rect.top }; }
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(getCoords(e).x, getCoords(e).y); }, {passive: false});
+        canvas.addEventListener('click', (e) => handleAction(getCoords(e).x, getCoords(e).y));
+
+        function handleAction(x, y) {
+            let targetGrid = null;
+            for(let g of grids) { if(Math.hypot(g.x + g.size/2 - x, g.y + g.size/2 - y) < currentTileSize * 0.9) { targetGrid = g; break; } }
+            
+            if(targetGrid) {
+                if(mode === 'spawn_sh' || mode === 'spawn_js') {
+                    if(!targetGrid.tower) {
+                        const cost = mode === 'spawn_sh' ? 20 : 50;
+                        if(money >= cost) {
+                            money -= cost;
+                            const nt = { x: targetGrid.x + targetGrid.size/2, y: targetGrid.y + targetGrid.size/2, type: mode === 'spawn_sh' ? 'SH' : 'JS', lv: 1, range: mode === 'spawn_sh' ? 250 : 350, cd: 0, maxCd: mode === 'spawn_sh' ? 20 : 60, gridRef: targetGrid };
+                            towers.push(nt); targetGrid.tower = nt;
+                            floatTexts.push({x: nt.x, y: nt.y, text: "설치!", life: 30, color: '#00ff00'});
+                            checkLaserCombination();
+                        } else {
+                            floatTexts.push({x: targetGrid.x + targetGrid.size/2, y: targetGrid.y + targetGrid.size/2, text: "골드 부족!", life: 30, color: '#ff0000'});
+                        }
+                        setMode('none', null);
+                    }
+                } else if(mode === 'upgrade') {
+                    if(targetGrid.tower) {
+                        let t = targetGrid.tower; let cost = t.lv * 150;
+                        if(t.lv < 4 && money >= cost) { 
+                            money -= cost; t.lv++; t.range += 50; 
+                            floatTexts.push({x: t.x, y: t.y, text: `Lv.${t.lv} 강화!`, life: 40, color: '#00ffff'});
+                            checkLaserCombination();
+                        } else if(t.lv >= 4) {
+                            floatTexts.push({x: t.x, y: t.y, text: "MAX LV", life: 30, color: '#ffaa00'});
+                        } else {
+                            floatTexts.push({x: t.x, y: t.y, text: `골드 부족(${cost})`, life: 30, color: '#ff0000'});
+                        }
+                    }
+                }
+            }
+            updateUI();
+        }
+
+        function checkLaserCombination() {
+            const sh4 = towers.filter(t => t.type === 'SH' && t.lv === 4), js4 = towers.filter(t => t.type === 'JS' && t.lv === 4);
+            if(sh4.length >= 4 && js4.length >= 4) {
+                let candidates = [];
+                for(let i = towers.length - 1; i >= 0; i--) { if(towers[i].lv === 4) { candidates.push(towers[i].gridRef); towers[i].gridRef.tower = null; towers.splice(i, 1); } }
+                let rg = candidates[Math.floor(Math.random() * candidates.length)];
+                const lt = { x: rg.x + rg.size/2, y: rg.y + rg.size/2, type: 'LASER', lv: 5, range: 1500, cd: 0, maxCd: 5, gridRef: rg };
+                towers.push(lt); rg.tower = lt; playSound('laser');
+            }
+        }
+
+        function spawnWave() {
+            let count = 10 + round; enemiesToSpawn = count;
+            let interval = setInterval(() => {
+                if(!isPlaying) { clearInterval(interval); return; }
+                const isBoss = (count === 1);
+                let hpVal = (round * 40) * (1 + round * 0.05);
+                enemies.push({ pathIdx: 0, x: path[0].x, y: path[0].y, hp: isBoss?hpVal*12:hpVal, maxHp: isBoss?hpVal*12:hpVal, speed: isBoss?0.7+round*0.015:1.2+round*0.04, isBoss: isBoss });
+                count--; enemiesToSpawn--; if(count <= 0) clearInterval(interval);
+            }, Math.max(300, 800 - round * 10));
+        }
+
+        function updateUI() { document.getElementById('ui-round').innerText = round; document.getElementById('ui-hp').innerText = Math.floor(hp); document.getElementById('ui-money').innerText = Math.floor(money); }
+
+        function gameLoop() {
+            if(!isPlaying) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(bgCanvas, 0, 0);
+            
+            // 🔥 수정됨: 집 크기를 더 줄임 (2.2->1.8, 2.8->2.3) 및 가리지 않게 좌표 미세 조정
+            const hW = currentTileSize * 1.8, hH = currentTileSize * 2.3;
+            const hX = path[path.length-1].x - hW * 0.5; // 중앙 정렬
+            const hY = path[path.length-1].y - hH * 0.5; // 중앙 정렬
+            if(homeImg.complete && homeImg.naturalWidth > 0) ctx.drawImage(homeImg, hX, hY, hW, hH);
+            else { ctx.fillStyle = '#444'; ctx.fillRect(hX, hY, hW, hH); }
+
+            enemies.forEach((e, i) => {
+                let target = path[e.pathIdx + 1];
+                if(target) {
+                    let ang = Math.atan2(target.y - e.y, target.x - e.x);
+                    e.x += Math.cos(ang) * e.speed; e.y += Math.sin(ang) * e.speed;
+                    if(Math.hypot(target.x - e.x, target.y - e.y) < 5) e.pathIdx++;
+                } else { hp -= (e.isBoss?25:8); enemies.splice(i, 1); updateUI(); }
+                ctx.fillStyle = e.isBoss ? 'red' : 'gray'; ctx.font = e.isBoss ? 'bold 30px serif' : '20px serif'; ctx.fillText(e.isBoss?'👹':'👾', e.x-10, e.y+5);
+                ctx.fillStyle = 'red'; ctx.fillRect(e.x-15, e.y-25, 30, 4); ctx.fillStyle = 'lime'; ctx.fillRect(e.x-15, e.y-25, 30 * (e.hp/e.maxHp), 4);
+            });
+
+            towers.forEach(t => {
+                let imgArr = (t.type === 'SH') ? shImages : (t.type === 'JS' ? jsImages : [laserImg5]);
+                let img = imgArr[(t.type === 'LASER') ? 0 : t.lv - 1];
+                
+                let sz = currentTileSize * 1.5;
+                
+                if(img && img.complete && img.naturalWidth > 0) ctx.drawImage(img, t.x - sz/2, t.y - sz/2, sz, sz);
+                else { ctx.fillStyle = t.type === 'SH' ? 'green' : 'blue'; ctx.fillRect(t.x-sz/2, t.y-sz/2, sz, sz); }
+                
+                ctx.fillStyle = 'white'; ctx.font = 'bold ' + Math.floor(sz * 0.18) + 'px Arial'; 
+                ctx.fillText('Lv'+t.lv, t.x - ctx.measureText('Lv'+t.lv).width/2, t.y + sz/2 + sz*0.1);
+                
+                t.cd--;
+                if(t.cd <= 0) {
+                    let target = enemies.find(e => Math.hypot(e.x - t.x, e.y - t.y) < t.range);
+                    if(target) {
+                        projectiles.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, target: target, dmg: (t.type==='SH'?18:50)*t.lv, useCustom: (t.type==='JS'&&t.lv===4) });
+                        t.cd = t.maxCd; playSound(t.type.toLowerCase());
+                    }
+                }
+            });
+
+            projectiles.forEach((p, i) => {
+                let ang = Math.atan2(p.ty - p.y, p.tx - p.x); p.x += Math.cos(ang) * 12; p.y += Math.sin(ang) * 12;
+                if(p.type === 'LASER') { ctx.strokeStyle = 'cyan'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.target.x, p.target.y); ctx.stroke(); }
+                else if(p.useCustom && jsAtkImg.complete && jsAtkImg.naturalWidth > 0) ctx.drawImage(jsAtkImg, p.x-20, p.y-20, 40, 40);
+                else { ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill(); }
+                
+                if(Math.hypot(p.tx - p.x, p.ty - p.y) < 20) { 
+                    p.target.hp -= p.dmg; 
+                    if(p.target.hp <= 0) { money += (p.target.isBoss?120:6); enemies = enemies.filter(e => e !== p.target); updateUI(); } 
+                    projectiles.splice(i, 1); 
+                }
+            });
+
+            for(let i = floatTexts.length - 1; i >= 0; i--) {
+                let ft = floatTexts[i]; 
+                ctx.fillStyle = ft.color; 
+                ctx.globalAlpha = ft.life / 30; 
+                ctx.font = 'bold 16px Arial'; 
+                ctx.fillText(ft.text, ft.x - ctx.measureText(ft.text).width/2, ft.y - 20 - (30 - ft.life)); 
+                ctx.globalAlpha = 1.0; 
+                ft.life--; 
+                if(ft.life <= 0) floatTexts.splice(i, 1);
+            }
+
+            if(hp <= 0) { alert('패배!'); location.reload(); isPlaying=false; }
+            if(enemies.length === 0 && enemiesToSpawn === 0 && isPlaying) { money += Math.floor(money * 0.05); round++; if(round > 50) alert('승리!'); else spawnWave(); updateUI(); }
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
