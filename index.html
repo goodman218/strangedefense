@@ -27,20 +27,9 @@
         .btn-guide { background: #7f8c8d; max-width: 60px; font-size: 11px; }
 
         #guide-modal { position: fixed; top: 50%; left: 50%; translate: -50% -50%; width: 85%; max-height: 70%; background: #222; border: 3px solid #f1c40f; padding: 20px; display: none; z-index: 2000; overflow-y: auto; font-size: 14px; line-height: 1.6; border-radius: 15px; }
-
-        /* 🔥 추가됨: 세로 모드일 때 덮어버리는 경고막 */
-        #rotate-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; color: #f1c40f; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.5; font-size: 20px; font-weight: bold; }
-        @media screen and (orientation: portrait) {
-            #rotate-overlay { display: flex; }
-        }
     </style>
 </head>
 <body>
-    <div id="rotate-overlay">
-        <span style="font-size: 50px;">🔄</span><br>
-        원활한 작전을 위해<br>스마트폰을 가로로 눕혀주세요!
-    </div>
-
     <div id="error-log"></div>
     <div id="start-screen">
         <h1 id="start-title">주성이와 석현이의<br>기묘한 디펜스</h1>
@@ -118,6 +107,7 @@
             
             currentTileSize = Math.min(85, Math.floor(w / 10)); 
             
+            // 🔥 수정됨: 맨 오른쪽 광장을 아주 살짝 오른쪽으로 이동 (0.75 -> 0.78)
             const centers = [
                 {x: w * 0.23, y: h * 0.52}, 
                 {x: w * 0.50, y: h * 0.52}, 
@@ -182,16 +172,13 @@
             initMapData(); drawBackground(); isPlaying = true; spawnWave(); updateUI(); requestAnimationFrame(gameLoop);
         }
 
-        // 🔥 수정됨: 가로/세로 회전 시 약간의 딜레이를 주어 화면 크기를 완벽하게 다시 계산함
         window.addEventListener('resize', () => {
             if(isPlaying) {
-                setTimeout(() => {
-                    const container = document.getElementById('game-container');
-                    const bottomUi = document.getElementById('bottom-ui');
-                    canvas.width = container.clientWidth; 
-                    canvas.height = container.clientHeight - bottomUi.offsetHeight; 
-                    initMapData(); drawBackground();
-                }, 100);
+                const container = document.getElementById('game-container');
+                const bottomUi = document.getElementById('bottom-ui');
+                canvas.width = container.clientWidth; 
+                canvas.height = container.clientHeight - bottomUi.offsetHeight; 
+                initMapData(); drawBackground();
             }
         });
 
@@ -266,9 +253,10 @@
             if(!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(bgCanvas, 0, 0);
             
+            // 🔥 수정됨: 집 크기를 더 줄임 (2.2->1.8, 2.8->2.3) 및 가리지 않게 좌표 미세 조정
             const hW = currentTileSize * 1.8, hH = currentTileSize * 2.3;
-            const hX = path[path.length-1].x - hW * 0.5; 
-            const hY = path[path.length-1].y - hH * 0.5; 
+            const hX = path[path.length-1].x - hW * 0.5; // 중앙 정렬
+            const hY = path[path.length-1].y - hH * 0.5; // 중앙 정렬
             if(homeImg.complete && homeImg.naturalWidth > 0) ctx.drawImage(homeImg, hX, hY, hW, hH);
             else { ctx.fillStyle = '#444'; ctx.fillRect(hX, hY, hW, hH); }
 
