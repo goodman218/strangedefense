@@ -15,10 +15,13 @@
         #game-container { position: relative; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; }
         #game-canvas { display: block; margin: 0 auto; flex-grow: 1; }
 
-        #top-ui { position: absolute; top: 0; left: 0; width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: space-around; font-size: 14px; z-index: 10; border-bottom: 2px solid #333; box-sizing: border-box; }
+        /* 🔥 수정됨: 뽑기/강화 버튼 UI가 상단(top-ui)으로 위치 이동 */
+        #top-ui { position: absolute; top: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.8); padding: 10px 5px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; border-bottom: 2px solid #333; z-index: 10; box-sizing: border-box; }
+        
+        /* 🔥 수정됨: 라운드/HP/골드 상태창 UI가 하단(bottom-ui)으로 위치 이동 */
+        #bottom-ui { width: 100%; background: rgba(0, 0, 0, 0.8); padding: 10px; display: flex; justify-content: space-around; font-size: 14px; z-index: 10; border-top: 2px solid #333; box-sizing: border-box; }
+        
         .stat-box { color: #f1c40f; font-weight: bold; }
-
-        #bottom-ui { width: 100%; background: rgba(0, 0, 0, 0.8); padding: 10px 5px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; border-top: 2px solid #333; z-index: 10; box-sizing: border-box; }
         .control-btn { padding: 12px 8px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 2px solid #555; background: #333; color: white; cursor: pointer; flex: 1; min-width: 80px; }
         .control-btn.active { border-color: #f1c40f; background: #555; box-shadow: inset 0 0 10px #000; }
         .btn-sh { background: #27ae60; }
@@ -47,16 +50,18 @@
 
     <div id="game-container">
         <div id="top-ui">
-            <div class="stat-box">라운드: <span id="ui-round">1</span>/50</div>
-            <div class="stat-box">❤️ HP: <span id="ui-hp">100</span></div>
-            <div class="stat-box">💰 골드: $<span id="ui-money">150</span></div>
-        </div>
-        <canvas id="game-canvas"></canvas>
-        <div id="bottom-ui">
             <button class="control-btn btn-sh" onclick="setMode('spawn_sh', this)">석현이($20)</button>
             <button class="control-btn btn-js" onclick="setMode('spawn_js', this)">주성이($50)</button>
             <button class="control-btn btn-up" onclick="setMode('upgrade', this)">강화</button>
             <button class="control-btn btn-guide" onclick="document.getElementById('guide-modal').style.display='block'">가이드</button>
+        </div>
+        
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="bottom-ui">
+            <div class="stat-box">라운드: <span id="ui-round">1</span>/50</div>
+            <div class="stat-box">❤️ HP: <span id="ui-hp">100</span></div>
+            <div class="stat-box">💰 골드: $<span id="ui-money">150</span></div>
         </div>
     </div>
 
@@ -107,7 +112,6 @@
             
             currentTileSize = Math.min(85, Math.floor(w / 10)); 
             
-            // 🔥 수정됨: 맨 오른쪽 광장을 아주 살짝 오른쪽으로 이동 (0.75 -> 0.78)
             const centers = [
                 {x: w * 0.23, y: h * 0.52}, 
                 {x: w * 0.50, y: h * 0.52}, 
@@ -253,10 +257,9 @@
             if(!isPlaying) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(bgCanvas, 0, 0);
             
-            // 🔥 수정됨: 집 크기를 더 줄임 (2.2->1.8, 2.8->2.3) 및 가리지 않게 좌표 미세 조정
             const hW = currentTileSize * 1.8, hH = currentTileSize * 2.3;
-            const hX = path[path.length-1].x - hW * 0.5; // 중앙 정렬
-            const hY = path[path.length-1].y - hH * 0.5; // 중앙 정렬
+            const hX = path[path.length-1].x - hW * 0.5; 
+            const hY = path[path.length-1].y - hH * 0.5; 
             if(homeImg.complete && homeImg.naturalWidth > 0) ctx.drawImage(homeImg, hX, hY, hW, hH);
             else { ctx.fillStyle = '#444'; ctx.fillRect(hX, hY, hW, hH); }
 
